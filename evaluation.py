@@ -1,8 +1,9 @@
 from torch import optim
 import time
 from utils import *
+from models import *
 import random
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 import numpy as np
 from collections import Counter
 
@@ -15,7 +16,7 @@ args = parser.parse_args()
 def evaluate(experiment):
     print('loading setting "{}"...'.format(experiment))
     config = initialize_env(experiment)
-    XD_test, YD_test, XU_test, _, turn_test = create_traindata(config=config, prefix='test')
+    XD_test, YD_test, XU_test, _, turn_test = create_traindata(config=config, prefix='dev')
     da_vocab = da_Vocab(config, create_vocab=False)
     utt_vocab = utt_Vocab(config, create_vocab=False)
     XD_test = da_vocab.tokenize(XD_test)
@@ -28,6 +29,8 @@ def evaluate(experiment):
     indexes = [i for i in range(len(XU_test))]
     acc = []
     macro_f = []
+    predicted_list = []
+    gold_list = []
     while k < len(indexes):
         step_size = min(batch_size, len(indexes) - k)
         batch_idx = indexes[k: k + step_size]
@@ -53,12 +56,16 @@ def evaluate(experiment):
             YD_tensor = torch.tensor([YD[-1] for YD in YD_seq]).cpu()
         preds = predictor.predict(X_da=XD_tensor, X_utt=XU_tensor, turn=turn_tensor, step_size=step_size)
         preds = np.argmax(preds, axis=1)
+        predicted_list.extend(preds)
+        gold_list.extend(YD_tensor.data.tolist())
         acc.append(accuracy_score(y_pred=preds, y_true=YD_tensor.data.tolist()))
         macro_f.append(f1_score(y_true=YD_tensor.data.tolist(), y_pred=preds, average='macro'))
         k += step_size
     print('Avg. Accuracy: ', np.mean(acc))
     print('Avg. macro-F: ', np.mean(macro_f))
-
+    #print(len(gold_list), len(predicted_list), len(gold_list[0]), len(predicted_list[0]))
+    print(classification_report(gold_list, predicted_list))
+    print('Overall accuracy: ', accuracy_score(y_pred=predicted_list, y_true=gold_list))
 
 if __name__ == '__main__':
     args = parse()

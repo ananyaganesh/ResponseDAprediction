@@ -4,6 +4,7 @@ import argparse
 import pyhocon
 import pickle
 from nltk import tokenize
+from collections import defaultdict
 
 
 EOS_token = '<EOS>'
@@ -28,12 +29,14 @@ def parse():
     parser.add_argument('--gpu', '-g', type=int, default=0, help='input gpu num')
     args = parser.parse_args()
     if torch.cuda.is_available():
-        torch.cuda.set_device(args.gpu)
+        #torch.cuda.set_device(args.gpu)
+        print('GPU: ', torch.cuda.current_device())
     return args
 
 def initialize_env(name):
     corpus_path = {
-        'swda': {'path': './data/corpus/swda', 'pattern': r'^sw\_{}\_([0-9]*?)\.jsonlines$', 'lang': 'en'},
+        'swda': {'path': '/projects/anga5835/data/swda', 'pattern': r'^sw\_{}\_([0-9]*?)\.jsonlines$', 'lang': 'en'},
+        'talkback': {'path': '/projects/anga5835/data/jsonl', 'pattern': r'^{}\_(.*?)\.jsonlines$', 'lang': 'en'},
         'dailydialog': {'path': './data/corpus/dailydialog', 'pattern': r'^DailyDialog\_{}\_([0-9]*?)\.jsonlines$', 'lang': 'en'}
     }
     config = pyhocon.ConfigFactory.parse_file('experiments.conf')[name]
@@ -128,12 +131,14 @@ class utt_Vocab:
 
 def create_traindata(config, prefix='train'):
     file_pattern = re.compile(config['corpus_pattern'].format(prefix))
+    print('Pattern: ', file_pattern)
     files = [f for f in os.listdir(config['train_path']) if file_pattern.match(f)]
     da_posts = []
     da_cmnts = []
     utt_posts = []
     utt_cmnts = []
     turn = []
+    da_counts = defaultdict(int)
     # 1file 1conversation
     for filename in files:
         with open(os.path.join(config['train_path'], filename), 'r') as f:
@@ -154,21 +159,27 @@ def create_traindata(config, prefix='train'):
                         da_seq.append(easy_damsl(da))
                     else:
                         da_seq.append(da)
+                        da_counts[da] += 1
                     utt_seq.append(_utt)
                     turn_seq.append(0)
                 turn_seq[-1] = 1
             da_seq = [da for da in da_seq]
+        #print(da_counts)
         if len(da_seq) <= config['window_size']: continue
         for i in range(max(1, len(da_seq) - 1 - config['window_size'])):
             assert len(da_seq[i:min(len(da_seq)-1, i + config['window_size'])]) >= config['window_size'], filename
-            da_posts.append(da_seq[i:min(len(da_seq)-1, i + config['window_size'])])
-            da_cmnts.append(da_seq[1 + i:min(len(da_seq), 1 + i + config['window_size'])])
+            da_posts.append(da_seq[i:min(len(da_seq)-1, i + config['window_size'])]) # append i:i+context DAs, check boundary
+            da_cmnts.append(da_seq[1 + i:min(len(da_seq), 1 + i + config['window_size'])]) #prev plus one
             utt_posts.append(utt_seq[i:min(len(da_seq)-1, i + config['window_size'])])
             utt_cmnts.append(utt_seq[1 + i:min(len(da_seq), 1 + i + config['window_size'])])
             turn.append(turn_seq[i:min(len(da_seq), i + config['window_size'])])
     assert len(da_posts) == len(da_cmnts), 'Unexpect length da_posts and da_cmnts'
     assert len(utt_posts) == len(utt_cmnts), 'Unexpect length utt_posts and utt_cmnts'
     assert all(len(ele) == config['window_size'] for ele in da_posts), {len(ele) for ele in da_posts}
+    
+    total_classes = sum(da_counts.values())
+    class_weights = [1 - (x / total_classes) for x in da_counts.values()]
+    print(class_weights, da_counts)    
     return da_posts, da_cmnts, utt_posts, utt_cmnts, turn
 
 def easy_damsl(tag):
@@ -186,5 +197,8 @@ def separate_data(posts, cmnts, turn):
 
 def en_preprocess(utterance):
     if utterance == '': return ['<Silence>']
+    if isinstance(utterance, float):
+      print(utterance)
+      utterance = str(utterance)
     return tokenize.word_tokenize(utterance.lower())
 

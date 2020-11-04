@@ -33,7 +33,9 @@ class DApredictModel(nn.Module):
         decoder_output = self.da_decoder(dec_hidden) # (batch_size, 1, DA_VOCAB)
         decoder_output = decoder_output.squeeze(1) # (batch_size, DA_VOCAB)
         Y_da = Y_da.squeeze()
-        loss = self.criterion(decoder_output, Y_da)
+        class_weights = [0, 0.6220204672350252, 0.6349587966404631, 0.8974740205305032, 0.9008272305964602, 0.9811619189219113, 0.9890467076854942, 0.986444806478655, 0.990240893345776, 0.9978251585657119]
+        weights = torch.FloatTensor(class_weights).to(device)
+        loss = self.criterion(decoder_output, Y_da, weight=weights)
         if self.training:
             loss.backward()
         return loss.item(), decoder_output.data.cpu().numpy()

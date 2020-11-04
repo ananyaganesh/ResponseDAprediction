@@ -7,6 +7,7 @@ from torch import optim
 from models import *
 from utils import *
 from nn_blocks import *
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 import argparse
 import random
 import numpy as np
@@ -15,7 +16,7 @@ import numpy as np
 def train(experiment):
     config = initialize_env(experiment)
     XD_train, YD_train, XU_train, YU_train, turn_train = create_traindata(config=config, prefix='train')
-    XD_valid, YD_valid, XU_valid, YU_valid, turn_valid = create_traindata(config=config, prefix='valid')
+    XD_valid, YD_valid, XU_valid, YU_valid, turn_valid = create_traindata(config=config, prefix='dev')
     print('Finish create train data...')
 
     if os.path.exists(os.path.join(config['log_root'], 'da_vocab.dict')):
@@ -61,7 +62,7 @@ def train(experiment):
             batch_idx = indexes[k: k + step_size]
             model_opt.zero_grad()
             # create batch data
-            print('\rConversation {}/{} training...'.format(k + step_size, len(XD_train)), end='')
+            #print('\rConversation {}/{} training...'.format(k + step_size, len(XD_train)), end='')
             XU_seq = [XU_train[seq_idx] for seq_idx in batch_idx]
             XD_seq = [XD_train[seq_idx] for seq_idx in batch_idx]
             YD_seq = [YD_train[seq_idx] for seq_idx in batch_idx]
